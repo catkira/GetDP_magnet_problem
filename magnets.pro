@@ -41,9 +41,6 @@ Function{
     mu[Magnet~{i}] = MUR~{i} * mu0;
     nu[Magnet~{i}] = 1.0/(MUR~{i} * mu0);
   EndFor
-
-  // Maxwell stress tensor
-  TM[] = ( SquDyadicProduct[$1] - SquNorm[$1] * TensorDiag[0.5, 0.5, 0.5] ) / mu[] ;
 }
 
 Jacobian {
@@ -84,13 +81,6 @@ Constraint {
       { Region Vol_Mag ; SubRegion Dirichlet_a_0 ; Value 0. ; }
     }
   }
-  For i In {1:NumMagnets}
-    { Name un~{i} ;
-      Case {
-        { Region SkinMagnet~{i} ; Value 1. ; }
-      }
-    }
-  EndFor
 }
 
 FunctionSpace {
@@ -116,57 +106,29 @@ FunctionSpace {
         NameOfConstraint GaugeCondition_a ; }
     }
   }
-  For i In {1:NumMagnets}
-    // auxiliary field on layer of elements touching each magnet, for the
-    // accurate integration of the Maxwell stress tensor (using the gradient of
-    // this field)
-    { Name H_un~{i} ; Type Form0 ;
-      BasisFunction {
-        { Name sn ; NameOfCoef un ; Function BF_GroupOfNodes ;
-          Support Air ; Entity GroupsOfNodesOf[ SkinMagnet~{i} ] ; }
-      }
-      Constraint {
-        { NameOfCoef un ; EntityType GroupsOfNodesOf ; NameOfConstraint un~{i} ; }
-      }
-    }
-  EndFor
 }
 
 Formulation {
   { Name MagSta_phi ; Type FemEquation ;
     Quantity {
       { Name phi ; Type Local ; NameOfSpace Hgrad_phi ; }
-      For i In {1:NumMagnets}
-        { Name un~{i} ; Type Local ; NameOfSpace H_un~{i} ; }
-      EndFor
     }
     Equation {
       Integral { [ - mu[] * Dof{d phi} , {d phi} ] ;
         In Vol_Mag ; Jacobian JVol ; Integration I1 ; }
       Integral { [ - mu[] * hc[] , {d phi} ] ;
         In Vol_Magnets_Mag ; Jacobian JVol ; Integration I1 ; }
-      For i In {1:NumMagnets} // dummy term to define dofs for fully fixed space
-        Integral { [ 0 * Dof{un~{i}} , {un~{i}} ] ;
-          In Vol_Mag ; Jacobian JVol ; Integration I1 ; }
-      EndFor
     }
   }
   { Name MagSta_a; Type FemEquation ;
     Quantity {
       { Name a  ; Type Local  ; NameOfSpace Hcurl_a ; }
-      For i In {1:NumMagnets}
-        { Name un~{i} ; Type Local ; NameOfSpace H_un~{i} ; }
-      EndFor
     }
     Equation {
       Integral { [ nu[] * Dof{d a} , {d a} ] ;
         In Vol_Mag ; Jacobian JVol ; Integration I1 ; }
       Integral { [ nu[] * br[] , {d a} ] ;
         In Vol_Magnets_Mag ; Jacobian JVol ; Integration I1 ; }
-      For i In {1:NumMagnets} // dummy term to define dofs for fully fixed space
-        Integral { [ 0 * Dof{un~{i}} , {un~{i}} ] ;
-          In Vol_Mag ; Jacobian JVol ; Integration I1 ; }
-      EndFor
     }
   }
 }
@@ -231,32 +193,6 @@ PostProcessing {
           Term { [ {phi} ] ; In Vol_Mag ; Jacobian JVol ; }
         }
       }
-      For i In {1:NumMagnets}
-        { Name un~{i} ; Value {
-            Term { [ {un~{i}} ] ; In Vol_Mag ; Jacobian JVol ; }
-          }
-        }
-        { Name f~{i} ; Value {
-            Integral { [ - TM[-mu[] * {d phi}] * {d un~{i}} ] ;
-              In Air ; Jacobian JVol ; Integration I1 ; }
-          }
-        }
-        { Name fx~{i} ; Value {
-            Integral { [ CompX[- TM[-mu[] * {d phi}] * {d un~{i}} ] ] ;
-              In Air ; Jacobian JVol ; Integration I1 ; }
-          }
-        }
-        { Name fy~{i} ; Value {
-            Integral { [ CompY[- TM[-mu[] * {d phi}] * {d un~{i}} ] ] ;
-              In Air ; Jacobian JVol ; Integration I1 ; }
-          }
-        }
-        { Name fz~{i} ; Value {
-            Integral { [ CompZ[- TM[-mu[] * {d phi}] * {d un~{i}} ] ] ;
-              In Air ; Jacobian JVol ; Integration I1 ; }
-          }
-        }
-      EndFor
     }
   }
   { Name MagSta_a ; NameOfFormulation MagSta_a ;
@@ -273,32 +209,6 @@ PostProcessing {
           Term { [ br[] ]; In Vol_Magnets_Mag ; Jacobian JVol; }
         }
       }
-      For i In {1:NumMagnets}
-        { Name un~{i} ; Value {
-            Term { [ {un~{i}} ] ; In Vol_Mag ; Jacobian JVol ; }
-          }
-        }
-        { Name f~{i} ; Value {
-            Integral { [ - TM[{d a}] * {d un~{i}} ] ;
-              In Air ; Jacobian JVol ; Integration I1 ; }
-          }
-        }
-        { Name fx~{i} ; Value {
-            Integral { [ CompX[- TM[{d a}] * {d un~{i}} ] ] ;
-              In Air ; Jacobian JVol ; Integration I1 ; }
-          }
-        }
-        { Name fy~{i} ; Value {
-            Integral { [ CompY[- TM[{d a}] * {d un~{i}} ] ] ;
-              In Air ; Jacobian JVol ; Integration I1 ; }
-          }
-        }
-        { Name fz~{i} ; Value {
-            Integral { [ CompZ[- TM[{d a}] * {d un~{i}} ] ] ;
-              In Air ; Jacobian JVol ; Integration I1 ; }
-          }
-        }
-      EndFor
     }
   }
 }
@@ -311,16 +221,6 @@ PostOperation {
         File "b_cut1.pos" ];
       //Print[ h, OnElementsOf Vol_Mag, File "h.pos" ] ;
       //Print[ hc, OnElementsOf Vol_Mag, File "hc.pos" ] ;
-      For i In {1:NumMagnets}
-        //Print[ un~{i}, OnElementsOf Vol_Mag, File "un.pos"  ];
-        Print[ f~{i}[Air], OnGlobal, Format Table, File > "F.dat"  ];
-        Print[ fx~{i}[Air], OnGlobal, Format Table, File > "Fx.dat",
-          SendToServer Sprintf("Output/Magnet %g/X force [N]", i), Color "Ivory"  ];
-        Print[ fy~{i}[Air], OnGlobal, Format Table, File > "Fy.dat",
-          SendToServer Sprintf("Output/Magnet %g/Y force [N]", i), Color "Ivory"  ];
-        Print[ fz~{i}[Air], OnGlobal, Format Table, File > "Fz.dat",
-          SendToServer Sprintf("Output/Magnet %g/Z force [N]", i), Color "Ivory"  ];
-      EndFor
     }
   }
   { Name MagSta_a ; NameOfPostProcessing MagSta_a ;
@@ -330,16 +230,6 @@ PostOperation {
         File "b_cut1.pos" ];
       //Print[ br,  OnElementsOf Vol_Magnets_Mag,  File "br.pos" ];
       //Print[ a,  OnElementsOf Vol_Mag,  File "a.pos" ];
-      For i In {1:NumMagnets}
-        //Print[ un~{i}, OnElementsOf Vol_Mag, File "un.pos"  ];
-        Print[ f~{i}[Air], OnGlobal, Format Table, File > "F.dat"  ];
-        Print[ fx~{i}[Air], OnGlobal, Format Table, File > "Fx.dat",
-          SendToServer Sprintf("Output/Magnet %g/X force [N]", i), Color "Ivory"  ];
-        Print[ fy~{i}[Air], OnGlobal, Format Table, File > "Fy.dat",
-          SendToServer Sprintf("Output/Magnet %g/Y force [N]", i), Color "Ivory"  ];
-        Print[ fz~{i}[Air], OnGlobal, Format Table, File > "Fz.dat",
-          SendToServer Sprintf("Output/Magnet %g/Z force [N]", i), Color "Ivory"  ];
-      EndFor
     }
   }
 }
